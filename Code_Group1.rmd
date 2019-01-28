@@ -1,0 +1,473 @@
+---
+title: "EDA Project - House Data"
+author: "Group 1"
+date: "December 1, 2018"
+output:
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: console
+---
+
+# library installations
+
+```{r}
+
+library(ggplot2)
+library(ggridges)
+library(ggpubr)
+library(corrplot)
+library(randomForest)
+library(glmnet)
+library(gbm)
+
+```
+
+# Importing the data
+
+```{r}
+
+house_data=read.table("house_data.csv",header=TRUE,sep=",")
+
+# Removing the column with name 'ID'
+house_data=subset(house_data,select=-c(Id))
+head(house_data)
+
+# Size of the dataset
+dim(house_data)
+
+```
+# Variable Information and trends
+
+```{r}
+
+ggplot(data=house_data,aes(SalePrice))+geom_histogram(bins=100,col='red')+xlab('Sale Price')+ylab('Count')
+
+```
+
+```{r}
+
+# Summary of sale price
+print('Summary of Sale Price : ')
+summary(house_data$SalePrice)
+
+```
+
+For Neighborhood
+
+```{r}
+
+ggplot(house_data,aes(x=Neighborhood,y=SalePrice))+geom_boxplot()+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(
+  house_data, 
+  aes(x = SalePrice, y = Neighborhood)
+  ) +
+  geom_density_ridges_gradient(
+    aes(fill = ..x..), scale = 3, size = 0.3
+    ) +
+  scale_fill_gradientn(
+    colours = c("#0D0887FF", "#CC4678FF", "#F0F921FF"),
+    name = "Sale Price [$]"
+    )+
+  labs(title = 'Sale price in different neighborhoods') 
+
+```
+
+Northridge and Northridge heights appear to be the neighborhoods with high sale price.
+
+For Garage Area
+
+```{r}
+
+ggdensity(house_data, x = "GarageArea", 
+          fill = "#0073C2FF", color = "#0073C2FF",
+          add = "mean", rug = TRUE)+xlab('Garage Area')+ylab('Density')
+
+```
+
+For the houses on sale, the average garage area is estimated to be around 500 sq. ft.
+
+```{r}
+
+boxplot(SalePrice~Foundation,data=house_data,col=colors()[100:102],main='Sale price variation with Foundation',xlab='Foundation',ylab='Sale Price')
+
+```
+
+We find that there is little to no effect of different types of foundation on the sale price.
+
+## Correlation
+
+```{r}
+
+# Correlation
+numeric_variables <- unlist(lapply(house_data, is.numeric))
+num_data=house_data[,numeric_variables]
+Cor=cor(num_data,use='pairwise.complete.obs')
+
+col=colorRampPalette(c("red", "white", "blue"))(20)
+corrplot(Cor, type="upper", order="hclust", col=col,tl.cex=0.5)
+
+```
+
+Finding the factors having correlation greater than 0.5
+
+```{r}
+
+cor_sorted=as.matrix(sort(Cor[,'SalePrice'], decreasing = TRUE))
+cor_high=names(which(apply(cor_sorted, 1, function(x) abs(x)>0.5)))
+cor_final=Cor[cor_high,cor_high]
+
+corrplot(cor_final, type="upper", method='number')
+
+```
+
+Sale Price has high correlation with Overall Quality, Ground living area, Car capacity of a garage and garage area. 
+
+```{r}
+
+ggplot(house_data, aes(x=OverallQual, y=SalePrice)) +
+  geom_point(size=2, shape=23)+geom_smooth(method='lm')
+
+ggplot(house_data, aes(x=GrLivArea, y=SalePrice)) +
+  geom_point(size=2, shape=23)+geom_smooth(method='lm')
+
+ggplot(house_data, aes(x=GarageArea, y=SalePrice)) +
+  geom_point(size=2, shape=23)+geom_smooth(method='lm')
+
+ggplot(house_data, aes(x=YearBuilt, y=SalePrice)) +
+  geom_point(size=2, shape=23)+geom_smooth(method='lm')
+
+```
+
+# Check for missing data
+
+```{r}
+
+# Total number of missing values grouped by column names
+colSums(sapply(house_data,is.na))
+
+```
+
+
+```{r}
+
+# Arranging in decreasing order
+sort(colSums(sapply(house_data, is.na)), decreasing = TRUE)
+
+```
+
+# Filling the missing data
+
+For PoolQC
+
+```{r}
+temp=as.character(house_data$PoolQC)
+temp[which(is.na(house_data$PoolQC))]='None'
+house_data$PoolQC=as.factor(temp)
+```
+
+For MiscFeature
+
+```{r}
+temp=as.character(house_data$MiscFeature)
+temp[which(is.na(house_data$MiscFeature))]='None'
+house_data$MiscFeature=as.factor(temp)
+```
+
+For Alley
+
+```{r}
+temp=as.character(house_data$Alley)
+temp[which(is.na(house_data$Alley))]='None'
+house_data$Alley=as.factor(temp)
+```
+
+For Fence (Qualitative)
+
+```{r}
+temp=as.character(house_data$Fence)
+temp[which(is.na(house_data$Fence))]='None'
+house_data$Fence=as.factor(temp)
+```
+
+For FireplaceQu (Qualitative)
+
+```{r}
+temp=as.character(house_data$FireplaceQu)
+temp[which(is.na(house_data$FireplaceQu))]='None'
+house_data$FireplaceQu=as.factor(temp)
+```
+
+For LotFrontage 
+
+```{r}
+house_data$LotFrontage[which(is.na(house_data$LotFrontage))]=mean(house_data$LotFrontage[!is.na(house_data$LotFrontage)])
+```
+
+For GarageType (Qualitative)
+
+```{r}
+temp=as.character(house_data$GarageType)
+temp[which(is.na(house_data$GarageType))]='None'
+house_data$GarageType=as.factor(temp)
+```
+
+For GarageYrBlt
+
+```{r}
+house_data$GarageYrBlt[which(is.na(house_data$GarageYrBlt))]=0
+```
+
+For GarageFinish (Qualitative)
+
+```{r}
+temp=as.character(house_data$GarageFinish)
+temp[which(is.na(house_data$GarageFinish))]='None'
+house_data$GarageFinish=as.factor(temp)
+```
+
+For GarageQual (Qualitative)
+
+```{r}
+temp=as.character(house_data$GarageQual)
+temp[which(is.na(house_data$GarageQual))]='None'
+house_data$GarageQual=as.factor(temp)
+```
+
+For GarageCond (Qualitative)
+
+```{r}
+temp=as.character(house_data$GarageCond)
+temp[which(is.na(house_data$GarageCond))]='None'
+house_data$GarageCond=as.factor(temp)
+```
+
+For BsmtExposure (Qualitative)
+
+```{r}
+temp=as.character(house_data$BsmtExposure)
+temp[which(is.na(house_data$BsmtExposure))]='None'
+house_data$BsmtExposure=as.factor(temp)
+```
+
+For BsmtFinType2 (Qualitative)
+
+```{r}
+temp=as.character(house_data$BsmtFinType2)
+temp[which(is.na(house_data$BsmtFinType2))]='None'
+house_data$BsmtFinType2=as.factor(temp)
+```
+
+For BsmtQual (Qualitative)
+
+```{r}
+temp=as.character(house_data$BsmtQual)
+temp[which(is.na(house_data$BsmtQual))]='None'
+house_data$BsmtQual=as.factor(temp)
+```
+
+For BsmtCond (Qualitative)
+
+```{r}
+temp=as.character(house_data$BsmtCond)
+temp[which(is.na(house_data$BsmtCond))]='None'
+house_data$BsmtCond=as.factor(temp)
+```
+
+For BsmtFinType1 (Qualitative)
+
+```{r}
+temp=as.character(house_data$BsmtFinType1)
+temp[which(is.na(house_data$BsmtFinType1))]='None'
+house_data$BsmtFinType1=as.factor(temp)
+```
+
+For MasVnrType (Qualitative)
+
+```{r}
+temp=as.character(house_data$MasVnrType)
+temp[which(is.na(house_data$MasVnrType))]='None'
+house_data$MasVnrType=as.factor(temp)
+```
+
+For MasVnrArea
+
+```{r}
+house_data$MasVnrArea[which(is.na(house_data$MasVnrArea))]=mean(house_data$MasVnrArea[!is.na(house_data$MasVnrArea)])
+```
+
+Observation 949 - Changing the BsmtExposure variable from None to most occuring value since the house associated with it has a basement 
+
+```{r}
+tab=table(house_data$BsmtExposure)
+print(tab)
+```
+
+Thus, we will assign the value 'Av' to observation 949
+
+```{r}
+house_data$BsmtExposure[949]='Av'
+```
+
+# Important variables from Random Forest
+
+```{r}
+
+set.seed(2018)
+row.has.na <- apply(house_data, 1, function(x){any(is.na(x))})
+datatest <- house_data[!row.has.na,]
+quick_RF <- randomForest(x=datatest[,-80], y=datatest$SalePrice, ntree=100,importance=TRUE, mtry = 9)
+imp_RF <- importance(quick_RF)
+imp_DF <- data.frame(Variables = row.names(imp_RF), MSE = imp_RF[,1])
+imp_DF <- imp_DF[order(imp_DF$MSE, decreasing = TRUE),]
+
+ggplot(imp_DF[1:20,], aes(x=reorder(Variables, MSE), y=MSE, fill=MSE),col='red') + geom_bar(stat = 'identity') + labs(x = 'Predictors', y= '% increase in MSE if variable is randomly permuted') + coord_flip() + theme(legend.position="none")
+
+```
+
+# Final important variables
+```{r}
+
+imp_var=c('Neighborhood','GrLivArea','X2ndFlrSF','OverallQual','TotalBsmtSF','BsmtFinSF1','YearBuilt','BsmtFinType1','GarageArea','MSZoning','KitchenQual','ExterQual','BsmtQual','FireplaceQu','GarageType','Fireplaces','FullBath','MSSubClass','SalePrice')
+
+final_data=house_data[,imp_var]
+
+```
+
+# Applying Prediction Models
+
+Create train and test data 
+
+```{r}
+
+final_data$SalePrice <- final_data$SalePrice/100000  #Scaling the sales data to 100,000
+#Justify why we need to scale up to 100,000 USD
+train <- sample(1:nrow(final_data), nrow(final_data) / 2)
+house_data.train <- final_data[train, ]
+house_data.test <- final_data[-train, ]
+
+```
+
+# Multiple linear regression
+
+```{r}
+
+set.seed(1)
+mlr.housing_data <- lm(SalePrice ~., data = house_data.train)
+mlr.predictions <- predict(mlr.housing_data, house_data.test[!(house_data.test$Neighborhood=="Blueste"),])
+#summary(mlr.housing_data)
+
+mean((mlr.predictions-house_data.test$SalePrice)^2)
+
+```
+
+The test MSE using Multiple Linear Regression is 0.1126 or 11.26%
+
+## Ridge Regression
+
+```{r}
+
+# Creating X and y tensors for input 
+X=model.matrix(SalePrice~.,data=final_data)
+y=final_data$SalePrice
+
+# Ridge regression model
+grid=10^seq(10,-2,length=100)
+ridge.house_data=glmnet(X[train,],y[train],alpha=0,lambda=grid)
+dim(coef(ridge.house_data))
+
+# Using CV to find the best lambda
+set.seed(1)
+cv_ridge=cv.glmnet(X[train,],y[train],alpha=0)
+plot(cv_ridge)
+
+# Best lambda
+cat('The best lambda obtained using Cross Validation for ridge is :',cv_ridge$lambda.min)
+
+# Prediction using best lambda
+yhat_ridge=predict(ridge.house_data,s=cv_ridge$lambda.min,newx=X[-train,])
+ridge_err=mean((yhat_ridge-y[-train])^2)
+
+cat('\n','The obtained test MSE for ridge is :',ridge_err)
+
+```
+
+# Lasso Regression
+
+```{r}
+
+# Lasso Regression model
+lasso.house_data=glmnet(X[train,],y[train],alpha=1,lambda=grid)
+dim(coef(lasso.house_data))
+
+# Using CV to find the best lambda
+set.seed(1)
+cv_lasso=cv.glmnet(X[train,],y[train],alpha=1)
+plot(cv_lasso)
+
+# Best lambda
+cat('The best lambda obtained using Cross Validation for lasso is :',cv_lasso$lambda.min)
+
+# Prediction using best lambda
+yhat_lasso=predict(lasso.house_data,s=cv_lasso$lambda.min,newx=X[-train,])
+lasso_err=mean((yhat_lasso-y[-train])^2)
+
+cat('\n','The obtained test MSE for lasso is :',lasso_err)
+
+```
+
+# Regression Trees
+
+# Bagging 
+
+```{r}
+
+set.seed(1)
+bag.house_data <- randomForest(x=house_data.train[,-19], y=house_data.train$SalePrice, ntree=100,importance=TRUE, mtry = 18)
+
+yhat.bag = predict(bag.house_data, newdata = house_data.test)
+mean((yhat.bag-house_data.test$SalePrice)^2)
+imp.bag <- importance(bag.house_data)
+imp.DataFrame <- data.frame(Variables = row.names(imp.bag), MSE = imp.bag[,1])
+imp.DataFrame <- imp.DataFrame[order(imp.DataFrame$MSE, decreasing = TRUE),]
+
+ggplot(imp.DataFrame, aes(x=reorder(Variables, MSE), y=MSE, fill=MSE),col='red') + geom_bar(stat = 'identity') + labs(x = 'Predictors', y= '% increase in MSE if variable is randomly permuted') + coord_flip() + theme(legend.position="none")
+
+```
+
+Bagging Error rate: Results shows that the test error rate yielded from bagging is 0.1131 or 11.31%
+
+## Random Forest
+
+```{r}
+
+set.seed(1)
+rf.house_data <- randomForest(x=house_data.train[,-19], y=house_data.train$SalePrice, ntree=100,importance=TRUE, mtry = 4)
+
+yhat.rf = predict(rf.house_data, newdata = house_data.test)
+mean((yhat.rf-house_data.test$SalePrice)^2)
+imp.rf <- importance(rf.house_data)
+imp.DataFrame <- data.frame(Variables = row.names(imp.rf), MSE = imp.rf[,1])
+imp.DataFrame <- imp.DataFrame[order(imp.DataFrame$MSE, decreasing = TRUE),]
+
+ggplot(imp.DataFrame, aes(x=reorder(Variables, MSE), y=MSE, fill=MSE),col='red') + geom_bar(stat = 'identity') + labs(x = 'Predictors', y= '% increase in MSE if variable is randomly permuted') + coord_flip() + theme(legend.position="none")
+
+```
+
+Random Forest Error rate: Results shows that the test error rate yielded from random forest is 0.1017 or 10.17% which is an improvement over bagging.
+
+# Boosting
+
+```{r}
+
+set.seed (1)
+boost.house_data =gbm(SalePrice~.,data=house_data.train, distribution="gaussian", n.trees =100, shrinkage = 0.1, interaction.depth =1)
+
+yhat.boost = predict(boost.house_data, newdata = house_data.test, n.trees = 100)
+mean((yhat.boost-house_data.test$SalePrice)^2)
+
+```
+
+Boosting: Results shows that the test error rate yielded from boosting with shrinkage=0.1 and interaction depth=1 is 0.1703 or 17.03%
+
