@@ -1,3 +1,0 @@
-# Prediction-of-Housing-Prices
-
-I employed various data analysis techniques to predict the selling price of residential homes in Ames, Iowa. This can prove to be a good tool for sellers as they can analyze the prices of homes that they already own and for buyers who wish to purchase a new home. Currently, there are many options available to a buyer in the city and it is difficult to analyze the prices of homes. It is a cumbersome task to study every house on sale. Through this project, my aim is to predict the sales price of residential homes by considering the most important aspects (features) and determine the role they play in our decision.
